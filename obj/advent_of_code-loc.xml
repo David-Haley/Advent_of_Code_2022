@@ -1,10 +1,17 @@
 <?xml version="1.0"?>
-<Locations>
+<Locations >
   <Project>
-    <vfs_file>C:\Users\David\Documents\Advent_of_code\2022\advent_of_code.gpr</vfs_file>
+    <vfs_file />
     <file_marker current="true" column=" 1" line=" 1" >
       <vfs_project />
       <vfs_file>C:\Users\David\Documents\Advent_of_code\2022\src\december_01.adb</vfs_file>
+    </file_marker>
+  </Project>
+  <Project >
+    <vfs_file >C:\Users\David\Documents\Advent_of_code\2022\advent_of_code.gpr</vfs_file>
+    <file_marker current="true" column=" 1" line=" 1">
+      <vfs_project  />
+      <vfs_file >C:\Users\David\Documents\Advent_of_code\2022\src\december_01.adb</vfs_file>
     </file_marker>
   </Project>
 </Locations>

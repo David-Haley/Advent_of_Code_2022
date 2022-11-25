@@ -3,3 +3,9 @@
 
 # Ada Library Information
 *.ali
+
+# Object file directory
+obj/
+
+# Project file
+*.gpr
