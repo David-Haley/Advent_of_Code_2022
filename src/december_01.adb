@@ -5,6 +5,7 @@ with Ada.Strings; use Ada.Strings;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Vectors;
+with DJH.Execution_Time; use DJH.Execution_Time;
 
 procedure December_01 is
 
@@ -73,9 +74,11 @@ begin -- December_01
    Read_Elvs (Elf_Store);
    Sort (Elf_Store);
    Put_Line ("Part one:" & Sum (Last_Element (Elf_Store))'Img);
+   DJH.Execution_Time.Put_CPU_Time;
    for E in Natural range Last_Index (Elf_Store) - 2 .. Last_Index (Elf_Store)
    loop
       Three_Total := Three_Total + Sum (Elf_Store (E));
    end loop; -- E in Natural range Last_Index (Elf_Store) - 2 ...
    Put_Line ("Part two:" & Three_Total'Img);
+   DJH.Execution_Time.Put_CPU_Time;
 end December_01;
