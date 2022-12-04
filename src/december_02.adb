@@ -131,7 +131,7 @@ procedure December_02 is
    Round_Store : Round_Stores.Vector;
    Total_Score : Natural;
 
-begin -- December_01
+begin -- December_02
    Read_Input (Round_Store);
    Total_Score := 0;
    for R in Iterate (Round_Store) loop
