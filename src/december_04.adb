@@ -81,10 +81,9 @@ begin -- December_04
         Is_Subset (Pair_Store (P) (2), Pair_Store (P) (1)) then
          Overlap_Count_1 := Overlap_Count_1 + 1;
       end if; -- Is_Subset (Pair_Store (P) (1), Pair_Store (P) (2)) or ...
-      If Overlap (Pair_Store (P) (1), Pair_Store (P) (2)) or
-        Is_Subset (Pair_Store (P) (2), Pair_Store (P) (1)) then
+      If Overlap (Pair_Store (P) (1), Pair_Store (P) (2)) then
          Overlap_Count_2 := Overlap_Count_2 + 1;
-      end if; --  Overlap (Pair_Store (P) (1), Pair_Store (P) (2)) or ...
+      end if; -- Overlap (Pair_Store (P) (1), Pair_Store (P) (2))
    end loop; -- P in Iterate (Pair_Store)
    Put_Line ("Part one:" & Overlap_Count_1'Img);
    Put_Line ("Part two:" & Overlap_Count_2'Img);
