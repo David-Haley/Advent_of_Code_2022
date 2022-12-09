@@ -2,11 +2,9 @@ with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line; use Ada.Command_Line;
 with Ada.Text_IO.Unbounded_IO; use Ada.Text_IO.Unbounded_IO;
 with Ada.Strings; use Ada.Strings;
-with Ada.Strings.maps; use Ada.Strings.maps;
-with Ada.Strings.maps.Constants; use Ada.Strings.maps.Constants;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Ordered_Maps;
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Exceptions; use Ada.Exceptions;
 with DJH.Execution_Time; use DJH.Execution_Time;
 
@@ -20,7 +18,7 @@ procedure December_08 is
       Visible : Boolean := False;
    end record; -- Trees;
 
-   Type Coordinates is record
+   type Coordinates is record
       X, Y : Positive;
    end record; -- Coordinates;
 
