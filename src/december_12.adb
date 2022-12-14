@@ -2,8 +2,6 @@ with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line; use Ada.Command_Line;
 with Ada.Text_IO.Unbounded_IO; use Ada.Text_IO.Unbounded_IO;
 with Ada.Strings; use Ada.Strings;
-with Ada.Strings.Maps; use Ada.Strings.Maps;
-with Ada.Strings.Maps.Constants; use  Ada.Strings.Maps.Constants;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Exceptions; use Ada.Exceptions;
 with Ada.Containers; use Ada.Containers;
@@ -198,6 +196,6 @@ begin -- December_12
    Read_Input (Grid, End_Point);
    Put_Line ("Part one:" & Find_Path (Grid, End_Point)'Img);
    DJH.Execution_Time.Put_CPU_Time;
-   Put_Line ("Part two:" & Find_Shortest_Path (Grid, End_Point)'Img );
+   Put_Line ("Part two:" & Find_Shortest_Path (Grid, End_Point)'Img);
    DJH.Execution_Time.Put_CPU_Time;
 end December_12;
