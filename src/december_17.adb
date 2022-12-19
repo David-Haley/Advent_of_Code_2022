@@ -9,11 +9,6 @@ with Ada.Containers.Ordered_Sets;
 with Interfaces; use Interfaces;
 with DJH.Execution_Time; use DJH.Execution_Time;
 
--- Getting closer, criteria for establishing a cycle works for example but not
--- for my input. The real criteria for a repeat id the same rock index, same gas
--- index and the same state of the top four layers of the tower. Four layers
--- because the tallest rock is four units high
-
 procedure December_17 is
 
    subtype X_Ordinates is Natural range 0 .. 6;
@@ -31,6 +26,8 @@ procedure December_17 is
 
    type Rock_Indices is mod 5;
 
+   subtype Rock_Counts is Natural;
+
    type Rock_Arrays is array (Rock_Indices) of Rocks;
 
    type Coordinates is record
@@ -39,30 +36,44 @@ procedure December_17 is
    end record; -- Coordinates
 
    function "<" (Left, Right : Coordinates) return Boolean is
-      (Left.Y < Right.Y or (Left.Y = Right.Y and Left.X < Right.X));
+     (Left.Y < Right.Y or (Left.Y = Right.Y and Left.X < Right.X));
 
    function "=" (Left, Right : Coordinates) return Boolean is
-      (Left.X = Right.X and Left.Y = Right.Y);
+     (Left.X = Right.X and Left.Y = Right.Y);
 
    package Coordinate_Sets is new Ada.Containers.Ordered_Sets (Coordinates);
    use Coordinate_Sets;
 
    subtype Gas_Indices is Positive;
 
-   package Gas_Index_Sets is new Ada.Containers.Ordered_Sets (Gas_Indices);
-   use  Gas_Index_Sets;
+   subtype Top_States is Unsigned_32;
 
-   type Rock_Counts is record
-      Rock_Count, Rock_Height : Natural;
-   end record; -- Rock_Counts
+   type Pile_States is record
+      Rock_Index : Rock_Indices;
+      Gas_Index : Gas_Indices;
+      Top_State : Top_States;
+   end record; --  Pile_States
 
-   package Rock_Count_Maps is new
-     Ada.Containers.Ordered_Maps (Gas_Indices, Rock_Counts);
+   function "<" (Left, Right : Pile_States) return Boolean is
+     (Left.Rock_Index < Right.Rock_Index or
+        (Left.Rock_Index = Right.Rock_Index and
+             (Left.Gas_Index < Right.Gas_Index or
+                  (Left.Gas_Index = Right.Gas_Index and
+                         Left.Top_State < Right.Top_State))));
 
-   type Cycle_Pairs is record
-      Gas_Index_Set : Gas_Index_Sets.Set := Gas_Index_Sets.Empty_Set;
-      Rock_Count_Map : Rock_Count_Maps.Map := Rock_Count_Maps.Empty_Map;
-   end record; -- Cycle_Pairs
+   function "=" (Left, Right : Pile_States) return Boolean is
+     (Left.Rock_Index = Right.Rock_Index and
+        Left.Gas_Index = Right.Gas_Index and
+          Left.Top_State = Right.Top_State);
+
+   type Height_Element is record
+      Height : Y_Ordinates;
+      Rock_Count : Rock_Counts;
+   end record; -- Height_Element
+
+   package Height_Maps is new
+     Ada.Containers.Ordered_Maps (Pile_States, Height_Element);
+   use Height_Maps;
 
    procedure Read_Input (Gas_Jet_Data : out Unbounded_String;
                          Rock_Data : out Rock_Arrays) is
@@ -96,24 +107,6 @@ procedure December_17 is
          Put_Line (Exception_Message (E));
          raise;
    end Read_Input;
-
-   procedure Put (Chamber : in Coordinate_Sets.Set) is
-
-   begin -- Put
-      for Y in reverse Y_Ordinates range 0 .. Last_Element (Chamber).Y loop
-         Put ('|');
-         for X in X_Ordinates loop
-            if Contains (Chamber, (X, Y)) then
-               Put ('#');
-            else
-               Put ('.');
-            end if; --
-         end loop; --
-         Put_Line ("|");
-      end loop; -- Y in reverse Y_Ordinates range 0 .. Last_Element (Chamber).Y
-      Put_Line ("+-------+");
-      New_Line;
-   end; --Put
 
    procedure Fall (Chamber : in out Coordinate_Sets.Set;
                    Rock : in Rocks;
@@ -197,7 +190,7 @@ procedure December_17 is
    end Fall;
 
    function Pile (Gas_Jet_Data : in Unbounded_String;
-                  Rock_Data : in Rock_Arrays) return Natural is
+                  Rock_Data : in Rock_Arrays) return Y_Ordinates is
 
       Origin : Coordinates := (X_Start, Y_Start);
       Chamber : Coordinate_Sets.Set;
@@ -217,27 +210,34 @@ procedure December_17 is
    function Big_Pile (Gas_Jet_Data : in Unbounded_String;
                       Rock_Data : in Rock_Arrays) return Unsigned_64 is
 
-      --  function Top_Row (Chamber : in Coordinate_Sets.Set) Return Unsigned_8 is
-      --
-      --     Result : Unsigned_8 := 0;
-      --     MasK : constant Unsigned_8 := 2#00000001#;
-      --
-      --  begin -- Top_Row
-      --     for X in X_Ordinates loop
-      --        if Contains (Chamber, (X, Last_Element (Chamber).Y)) then
-      --           Result := Result or Shift_Left (Mask,X_Ordinates'Last - X);
-      --        end if; -- Contains (Chamber, (X, Last_Element (Chamber).X))
-      --     end loop; -- X in reverse X_R_Ordinates
-      --     return Result;
-      --  end Top_Row;
+      function Pile_Top (Chamber : in Coordinate_Sets.Set) Return Top_States is
+
+         -- Returns a representation of the top four rows. History beyond this
+         -- is not relevant as the maximum height of a single rock is four;
+
+         MasK : constant Top_States := 1;
+         Result : Top_States := 0;
+
+      begin -- Pile_Top
+         for Y in Y_Ordinates range
+           Last_Element (Chamber).Y - 3 .. Last_Element (Chamber).Y loop
+            for X in X_Ordinates loop
+               if Contains (Chamber, (X, Last_Element (Chamber).Y)) then
+                  Result := Result or
+                    Shift_Left (Mask, (Last_Element (Chamber).Y - Y) * 8 + X);
+               end if; -- Contains (Chamber, (X, Last_Element (Chamber).X))
+            end loop; -- X in X_Ordinates
+         end loop; -- Y in Y_Ordinates range ...
+         return Result;
+      end Pile_Top;
 
       Total_Rocks : constant Unsigned_64 := 1000000000000;
       Origin : Coordinates := (X_Start, Y_Start);
       Chamber : Coordinate_Sets.Set;
       Gas_Index : Gas_Indices := 1;
-      Rock_Count : Natural := 0;
+      Rock_Count : Rock_Counts := 0;
       Ri : Rock_Indices;
-      Cycle : array (Rock_Indices) of Cycle_Pairs;
+      Height_Map : Height_Maps.Map := Height_Maps.Empty_Map;
       Cycle_Height, Remaining_Rocks, Remaining_Cycles, Modulus : Unsigned_64;
 
    begin -- Big_Pile
@@ -251,30 +251,27 @@ procedure December_17 is
          Rock_Count := Rock_Count + 1;
          Fall (Chamber, Rock_Data (Ri), Origin, Gas_Jet_Data, Gas_Index);
          Origin.Y := Last_Element (Chamber).Y + Y_Start + 1;
-         if Contains (Cycle (RI).Gas_Index_Set, Gas_Index) then
+         if Contains (Height_Map, (Ri, Gas_Index, Pile_Top (Chamber))) then
             exit;
          else
-            Include (Cycle (RI).Gas_Index_Set, Gas_Index);
-            Rock_Count_Maps.Include (Cycle (RI).Rock_Count_Map, Gas_Index,
-                                     (Rock_Count, Last_Element (Chamber).Y + 1));
-         end if; -- RI = 0 and Gas_Index = 1
+            Include (Height_Map, (Ri, Gas_Index, Pile_Top (Chamber)),
+                     (Last_Element (Chamber).Y + 1, Rock_Count));
+         end if; -- Contains ((Ri, Gas_Index, Pile_Top (Chamber)))
       end loop; -- Until repeated pattern
-      Put_Line ("Rock_Count:" & Rock_Count'Img & Cycle (RI).Rock_Count_Map (Gas_Index).Rock_Count'Img &
-                  " Height:" & Positive'Image (Last_Element (Chamber).Y + 1) & Cycle (RI).Rock_Count_Map (Gas_Index).Rock_Height'Img);
       Cycle_Height :=
         Unsigned_64 (Last_Element (Chamber).Y + 1 -
-                         Cycle (RI).Rock_Count_Map (Gas_Index).Rock_Height);
+                         Height_Map ((Ri, Gas_Index, Pile_Top (Chamber))).
+                         Height);
       Modulus :=
         Unsigned_64 (Rock_Count -
-                       Cycle (RI).Rock_Count_Map (Gas_Index).Rock_Count);
+                       Height_Map ((Ri, Gas_Index, Pile_Top (Chamber))).
+                         Rock_Count);
       Remaining_Rocks := Total_Rocks - Unsigned_64 (Rock_Count);
       Remaining_Cycles := Remaining_Rocks / Modulus;
       Remaining_Rocks := Remaining_Rocks - Remaining_Cycles * Modulus;
-      Put_Line ("Modulus:" & Modulus'Img & " Cycle_Height:" & Cycle_Height'Img &
-                  " Remaining_Cycles:" & Remaining_Cycles'Img & " Remaining_Rocks:" & Remaining_Rocks'Img);
       if Remaining_Rocks > 0 then
          Remaining_Rocks := Remaining_Rocks + Unsigned_64 (Rock_Count);
-         -- required because of post tested loop
+         -- Required because of post tested loop
          loop -- Until Remaining_Rocks
             Ri := Rock_Indices (Rock_Count mod Rock_Indices'Modulus);
             Rock_Count := Rock_Count + 1;
