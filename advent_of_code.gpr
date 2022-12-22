@@ -3,7 +3,8 @@ project Advent_Of_Code is
    for Source_Dirs use ("src", "../../My_Ada_Files/DJH/src", "../../My_Ada_Files/NT_Console/src");
    for Object_Dir use "obj";
    for Main use ("december_01.adb", "december_02.adb", "december_03.adb", "december_04.adb", "december_05.adb", "december_06.adb", "december_07.adb", "december_08.adb", "december_09.adb", "december_10.adb", 
-      "december_10_compiler.adb", "december_11.adb", "december_12.adb", "december_13.adb", "december_14.adb", "december_15.adb", "december_16.adb", "december_17.adb", "december_18.adb", "december_19.adb");
+      "december_10_compiler.adb", "december_11.adb", "december_12.adb", "december_13.adb", "december_14.adb", "december_15.adb", "december_16.adb", "december_17.adb", "december_18.adb", "december_19.adb", "december_20.adb", 
+      "december_21.adb");
 
    package Builder is
       for Switches ("ada") use ("-g");
