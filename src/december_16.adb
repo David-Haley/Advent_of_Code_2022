@@ -185,35 +185,23 @@ procedure December_16 is
                          Current_Element : in State_Elements;
                          Path_Length : in Path_Lengths.Map;
                          Next_Room : in Rooms;
-                         Open_Valve : in Boolean;
                          Next_Element : out State_Elements) return Boolean is
 
          Tunnel : constant Tunnels := (Current_Element.Room, Next_Room);
          Is_Valid : Boolean;
 
       begin -- Set_Next
-         is_Valid :=
-           (Contains (Current_Element.Valves_to_Open, Next_Room) and
-              -- Not all time used up
-              Current_Element.Remaining > Path_Length (Tunnel) + Opening_Time
-            and Open_Valve)
-           or
-             (Current_Element.Remaining > Path_Length (Tunnel) and
-                    not Open_Valve);
+         is_Valid := Contains (Current_Element.Valves_to_Open, Next_Room) and
+           Current_Element.Remaining > Path_Length (Tunnel) + Opening_Time;
          if Is_Valid then
             Next_Element := Current_Element;
             Next_Element.Room := Next_Room;
             Include (Next_Element.Tunnel_Use, Tunnel);
-            if Open_Valve then
-               Next_Element.Remaining := Current_Element.Remaining -
-                 (Path_Length (Tunnel) + Opening_Time);
-               Next_Element.Volume := Current_Element.Volume +
-                 Next_Element.Remaining * Valve_List (Next_Room).Flowrate;
-               Exclude (Next_Element.Valves_to_Open, Next_Room);
-            else
-               Next_Element.Remaining := Current_Element.Remaining -
-                 Path_Length (Tunnel);
-            end if; -- Open_Valve
+            Next_Element.Remaining := Current_Element.Remaining -
+              (Path_Length (Tunnel) + Opening_Time);
+            Next_Element.Volume := Current_Element.Volume +
+              Next_Element.Remaining * Valve_List (Next_Room).Flowrate;
+            Exclude (Next_Element.Valves_to_Open, Next_Room);
          end if; -- Is_Valid
          return Is_Valid;
       end Set_Next;
@@ -221,8 +209,6 @@ procedure December_16 is
       Next_Element : State_Elements;
 
    begin -- Search
-      Put (Current_Element.Room & Current_Element.Remaining'Img & ": ");
-
       if Current_Element.Remaining <= Tunnel_Time + Opening_Time or
         Length (Current_Element.Valves_to_Open) = 0 then
          -- Search has ended
@@ -231,16 +217,11 @@ procedure December_16 is
          end if; -- Current_Element.Volume > Result
       else
          for T in iterate (Path_Length) loop
-            if Key (T).Entrance + Current_Element.Room then
-               for Open_Valve in Boolean loop
-                  Set_Next (valve_List, Current_Element, Path_Length,
-                            Key (T).Destination,
-                            Open_Valve,
-                            Next_Element, Is_Valid);
-                  if Is_Valid then
-                     Search (Valve_List, Next_Element, Result);
-                  end if; -- Is_Valid
-               end loop; -- Open_Valve
+            if Key (T).Entrance = Current_Element.Room then
+               if Set_Next (valve_List, Current_Element, Path_Length,
+                            Key (T).Destination, Next_Element) then
+                  Search (Valve_List, Next_Element, Path_Length, Result);
+               end if; -- Set_Next (valve_List, Current_Element, ...
             end if; --if Key (T).Entrance + Current_Element.Room
          end loop; --  T in iterate (Path_Length)
       end if; -- Current_Elemment.Remaining <= Tunnel_Time + Opening_Time or ...
@@ -260,12 +241,9 @@ begin -- December_16
       end if; -- Valve_List (V).Flowrate > 0
    end loop; -- V in iterate (Valve_List)
    Find_Shortest_Path (Valve_List, Path_Length);
-   for P in Iterate (Path_Length) loop
-      Put_Line (Key (P)'Img & Element (P)'Img);
-   end loop;
    Current_Element := (Room => "AA",
                        Volume => 0,
-                       Tunnel_Use => Tunnel_Uses.Empty_Map,
+                       Tunnel_Use => Tunnel_Uses.Empty_Set,
                        Valves_to_Open => Valves_to_Open,
                        Remaining => 30);
    Search (Valve_List, Current_Element, Path_Length, Part_One_Result);
