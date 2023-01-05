@@ -96,12 +96,14 @@ procedure December_19 is
          raise;
    end Read_Input;
 
-   procedure Update (Blueprint   : in     Blueprints; State : in States;
+   procedure Update (Blueprint   : in     Blueprints;
+                     State : in States;
                      Geode_Count : in out Natural;
                      Max_Workforce : in Workforces;
-                     Time_Limit : in Times := 24) is
+                     Time_Limit  : in Times := 24) is
 
-      function Sufficient (State : in States; Bluebrint : in Blueprints;
+      function Sufficient (State : in States;
+                           Bluebrint : in Blueprints;
                            Robot : in Robots;
                            Max_Workforce : in Workforces) return Boolean is
 
@@ -110,7 +112,8 @@ procedure December_19 is
       begin -- Sufficient
          if State.Workforce (Robot) < Max_Workforce (Robot) then
             for M in Materials loop
-               Result := Result and State.Material (M) >= Bluebrint (Robot) (M);
+               Result :=
+                 Result and State.Material (M) >= Bluebrint (Robot) (M);
             end loop; -- M in Materials
          else
             Result := False;
@@ -149,39 +152,50 @@ procedure December_19 is
       Next_State : States;
 
    begin -- Update
-      if State.Time = Time_limit then
+      if State.Time = Time_Limit then
          if State.Material (Geode) > Geode_Count then
             Geode_Count := State.Material (Geode);
-            Put_Line (State'Img);
          end if; -- State.Material (Geode) > Geode_Count
       else
-         for R in Robots loop
-            if Sufficient (State, Blueprint, R, Max_Workforce) then
-               Next_State := Build (State, Blueprint, R);
-               Collect (State, Next_State);
-               Update (Blueprint, Next_State, Geode_Count, Max_Workforce,
-                       Time_Limit);
-            end if; --  Sufficient (State, Bluebrint, R)
-         end loop; -- R in Robots
-         Next_State := State;
-         Collect (State, Next_State);
-         Update (Blueprint, Next_State, Geode_Count, Max_Workforce, Time_Limit);
+         if Sufficient (State, Blueprint, Geode, Max_Workforce) then
+            Next_State := Build (State, Blueprint, Geode);
+            Collect (State, Next_State);
+            Update
+              (Blueprint, Next_State, Geode_Count, Max_Workforce, Time_Limit);
+         else
+            for R in Robots range Ore .. Obsidian loop
+               if Sufficient (State, Blueprint, R, Max_Workforce) then
+                  Next_State := Build (State, Blueprint, R);
+                  Collect (State, Next_State);
+                  Update
+                    (Blueprint, Next_State, Geode_Count, Max_Workforce,
+                     Time_Limit);
+               end if; --  Sufficient (State, Bluebrint, R)
+            end loop; -- R in Robots
+            Next_State := State;
+            Collect (State, Next_State);
+            Update
+              (Blueprint, Next_State, Geode_Count, Max_Workforce, Time_Limit);
+         end if; -- Sufficient (State, Blueprint, Geode, Max_Workforce)
       end if; -- State.Time = Times_limit
    end Update;
 
-   function Quality (Blueprint_Store : in Blueprint_Stores.Vector;
-                     Part_2 : Boolean := False) return Natural is
+   function Solve (Blueprint_Store : in Blueprint_Stores.Vector;
+                   Part_2 : Boolean := False) return Natural is
 
-      State : States := (Material => (others => 0),
-                         Workforce => (Ore => 1, others => 0),
-                         Time     => 0);
-      Result      : Natural := 0;
-      Geode_Count : Natural;
+      State : States :=
+        (Material => (others => 0), Workforce => (Ore => 1, others => 0),
+         Time     => 0);
+      Result        : Natural := 0;
+      Geode_Count   : Natural;
       Max_Workforce : Workforces;
 
-   begin -- Quality
+   begin -- Solve.
+      if Part_2 then
+         Result := 1;
+      end if; -- Part_2
       -- Since only one robot can be made per time unit there is no point in
-      -- more robots producing output than can be consumed.
+      -- more robots producing output than can be consumed
       for B in Iterate (Blueprint_Store) loop
          Max_Workforce := (Geode => Natural'Last, others => 0);
          for Rw in Robots range Ore .. Obsidian loop
@@ -191,28 +205,29 @@ procedure December_19 is
                end if; -- Max_Workforce (Rw) < Blueprint_Store (B) (R) (Rw)
             end loop; -- R in Robots
          end loop; -- Rw in Robots range Ore .. Obsidian
-         Put_Line ("Max_Workforce:" & Max_Workforce'Img);
          Geode_Count := 0;
          if Part_2 then
-            Update (Blueprint_Store (B), State, Geode_Count, Max_Workforce, 32);
+            Update
+              (Blueprint_Store (B), State, Geode_Count, Max_Workforce, 32);
+            Result := Result * Geode_Count;
          else
             Update (Blueprint_Store (B), State, Geode_Count, Max_Workforce);
+            Result := Result + To_Index (B) * Geode_Count;
          end if; -- Part_2
-         Result := Result + To_Index (B) * Geode_Count;
       end loop; -- B in Iterate (Bluebrint_Store)
       return Result;
-   end Quality;
+   end Solve;
 
    Blueprint_Store : Blueprint_Stores.Vector;
 
 begin -- December_19
    Read_Input (Blueprint_Store);
-   --  Put_Line ("Part one:" & Quality (Blueprint_Store)'Img);
+   Put_Line ("Part one:" & Solve (Blueprint_Store)'Img);
    DJH.Execution_Time.Put_CPU_Time;
    -- Elephants ate blueprints
    while Last_Index (Blueprint_Store) > 3 loop
       Delete_Last (Blueprint_Store);
    end loop; -- Last_Index (Blueprint_Store)
-   Put_Line ("Part two:" & Quality (Blueprint_Store, True)'Img);
+   Put_Line ("Part two:" & Solve (Blueprint_Store, True)'Img);
    DJH.Execution_Time.Put_CPU_Time;
 end December_19;
