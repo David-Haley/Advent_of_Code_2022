@@ -87,6 +87,19 @@ procedure December_16 is
      Ada.Containers.Ordered_Maps (Release_Keys, Volumes);
    use Release_Tables;
 
+   type Destination_Keys is record
+      Entrance : Rooms;
+      Remaining_Time : Times;
+   end record; -- Destination_Keys
+
+   function "<" (Left, Right : Destination_Keys) return Boolean is
+     (Left.Entrance < Right.Entrance or else
+        (Left.Entrance = Right.Entrance and
+             Left.Remaining_Time < Right.Remaining_Time));
+
+   package Destination_Lists is new
+     Ada.Containers.Ordered_Maps (Destination_Keys, Destinations.Set);
+   use Destination_Lists;
 
    type Operators is (Human, Elephant);
 
@@ -102,17 +115,6 @@ procedure December_16 is
       Valves_to_Open : Destinations.Set;
       Operator_State : Operator_States;
    end record; -- State_Elements
-
-   type Path_Log_Elements is record
-      Time : Times;
-      Operator : Operators;
-      Room : Rooms;
-      Volume : Volumes;
-   end record;
-
-   package Path_Logs is new
-     Ada.Containers.Vectors (Positive, Path_Log_Elements);
-   use Path_Logs;
 
    procedure Read_Input (Valve_List : out Valve_Lists.Map) is
 
@@ -209,7 +211,9 @@ procedure December_16 is
 
    procedure Build_Release_Table (Valve_List : in Valve_Lists.Map;
                                   Path_Length : in Path_Lengths.Map;
-                                  Release_Table : out Release_Tables.Map) is
+                                  Release_Table : out Release_Tables.Map;
+                                  Destination_List : out Destination_Lists.Map)
+   is
 
    begin -- Build_Release_Table
       Clear (Release_Table);
@@ -217,39 +221,24 @@ procedure December_16 is
          for T in Times range Path_Length (P) + 1 .. Times'Last loop
             include (Release_Table,
                      (Key (P).Entrance, Key (P).Destination, T),
-                      (T - Path_Length (P)) *
+                     (T - Path_Length (P)) *
                        Valve_List (Key (P).Destination).Flowrate);
          end loop; -- T in Times range Path_Length (P) + 1 .. Times'Last
       end loop; -- P in Iterate (Path_Length)
+      Clear (Destination_List);
+      -- Since the Release table only includes non zero releases the
+      -- Destination in the key is useful.
+      for R in Iterate (Release_Table) loop
+         if not Contains (Destination_List,
+                          (Key (R).Entrance, Key (R).Remaining_Time)) then
+            include (Destination_List,
+                     (Key (R).Entrance, Key (R).Remaining_Time),
+                     Destinations.Empty_Set);
+         end if; -- not Contains (Destination_List, ...
+         Include (Destination_List ((Key (R).Entrance, Key (R).Remaining_Time)),
+                  Key (R).Destination);
+      end loop; -- R in Iterate (Release_Table)
    end Build_Release_Table;
-
-   function Shortest_Remaining_Path (Current_Element : in State_Elements;
-                                     Path_Length : in Path_Lengths.Map;
-                                     Operator : in Operators)
-                                        return Times is
-
-      Result : Times := Times'Last;
-
-   begin -- Shortest_Remaining_Path
-      for V in Iterate (Current_Element.Valves_to_Open) loop
-         if Result >
-           Path_Length ((Current_Element.Operator_State (Operator).Room,
-                        Element (V))) then
-            Result :=
-              Path_Length ((Current_Element.Operator_State (Operator).Room,
-                           Element (V)));
-         end if; -- Result > Path_Length (Element (V))
-      end loop; -- V in Iterate (Current_Element.Valves_to_Open)
-      return Result;
-   end Shortest_Remaining_Path;
-
-   function Is_Valid (Release_Table : Release_Tables.Map;
-                      Next_Room : in Rooms;
-                      Operator : in Operators;
-                      Next_Element : in out State_Elements) return Boolean is
-     (Contains (Release_Table,
-      (Next_Element.Operator_State (Operator).Room, Next_Room,
-       Next_Element.Operator_State (Operator).Remaining)));
 
    procedure Set_Next (Valve_List : in Valve_Lists.Map;
                        Path_Length : in Path_Lengths.Map;
@@ -273,168 +262,112 @@ procedure December_16 is
         - Path_Length (Tunnel);
    end Set_Next;
 
-   pragma Inline_Always (Is_Valid, Set_Next);
+   pragma Inline_Always (Set_Next);
 
    procedure Search_One (Valve_List : in Valve_Lists.Map;
                          Current_Element : in State_Elements;
                          Path_Length : in Path_Lengths.Map;
                          Release_Table : Release_Tables.Map;
+                         Destination_List : in Destination_Lists.Map;
                          Result : in out Volumes) is
 
       Next_Element : State_Elements;
+      Search_List : Destinations.Set;
 
    begin -- Search_One
-      if (Current_Element.Operator_State (Human).Remaining <=
-            Shortest_Remaining_Path (Current_Element, Path_Length, Human) and
-            Current_Element.Operator_State (Elephant).Remaining <=
-            Shortest_Remaining_Path (Current_Element, Path_Length, Elephant))
-        or Is_Empty (Current_Element.Valves_to_Open) then
-         -- Search ended either no time to operate more valves or no more valves
-         -- to operate.
+      if Contains (Destination_List,
+                   ((Current_Element.Operator_State (Human).Room,
+                   Current_Element.Operator_State (Human).Remaining))) then
+      Search_List :=
+        Intersection (Current_Element.Valves_to_Open,
+                      Destination_List (
+                        (Current_Element.Operator_State (Human).Room,
+                        Current_Element.Operator_State (Human).Remaining)));
+      else
+         Search_List := Destinations.Empty_Set;
+      end if; -- Contains (Destination_List, ...
+      if Is_Empty (Search_List) then
          if Current_Element.Volume > Result then
             Result := Current_Element.Volume;
          end if; -- Current_Element.Volume > Result
       else
-         for H in Iterate (Current_Element.Valves_to_Open) loop
+         for H in Iterate (Search_List) loop
             Next_Element := Current_Element;
-            if Is_Valid (Release_Table, Element (H), Human, Next_Element) then
-              Set_Next (valve_List, Path_Length, Release_Table, Element (H),
-                         Human, Next_Element);
-               Search_One (Valve_List, Next_Element, Path_Length, Release_Table,
-                           Result);
-            end if; -- Is_Valid (Release_Table, Element (H), Human, ...
-         end loop; -- H in Iterate (Current_Element.Valves_to_Open)
-      end if; -- Current_Elemment.Remaining <= Tunnel_Time + Opening_Time or ...
+            Set_Next (valve_List, Path_Length, Release_Table, Element (H),
+                      Human, Next_Element);
+            Search_One (Valve_List, Next_Element, Path_Length, Release_Table,
+                        Destination_List, Result);
+         end loop; -- Iterate (Search_List)
+      end if; -- Is_Empty (Search_List)
    end Search_One;
 
    procedure Search_Two (Valve_List : in Valve_Lists.Map;
                          Current_Element : in State_Elements;
                          Path_Length : in Path_Lengths.Map;
-                         Release_Table : Release_Tables.Map;
-                         Result : in out Volumes;
-                         Path_Log : In out Path_Logs.Vector) is
+                         Release_Table : in Release_Tables.Map;
+                         Destination_List : in Destination_Lists.Map;
+                         Result : in out Volumes) is
 
       Next_Element : State_Elements;
-      Path_Log_Element : Path_Log_Elements;
-      Valves_Operated : Natural;
+      Elephant_Search_List, Human_Search_List : Destinations.Set;
 
    begin -- Search_Two
-      if (Current_Element.Operator_State (Human).Remaining <=
-            Shortest_Remaining_Path (Current_Element, Path_Length, Human) and
-              Current_Element.Operator_State (Elephant).Remaining <=
-            Shortest_Remaining_Path (Current_Element, Path_Length, Elephant))
-        or Is_Empty (Current_Element.Valves_to_Open) then
-         -- Search ended either no time to operate more valves or no more valves
-         -- to operate.
-         if Current_Element.Volume >= Result then
+      if Contains (Destination_List,
+                   ((Current_Element.Operator_State (Human).Room,
+                    Current_Element.Operator_State (Human).Remaining))) then
+         Human_Search_List :=
+           Intersection (Current_Element.Valves_to_Open,
+                         Destination_List (
+                           (Current_Element.Operator_State (Human).Room,
+                           Current_Element.Operator_State (Human).Remaining)));
+      else
+         Human_Search_List := Destinations.Empty_Set;
+      end if; -- Contains (Destination_List, ...
+      if Contains (Destination_List,
+                   ((Current_Element.Operator_State (Elephant).Room,
+                    Current_Element.Operator_State (Elephant).Remaining))) then
+         Elephant_Search_List :=
+           Intersection (Current_Element.Valves_to_Open,
+                         Destination_List (
+                           (Current_Element.Operator_State (Elephant).Room,
+                           Current_Element.Operator_State (Elephant).
+                             Remaining)));
+      else
+         Elephant_Search_List := Destinations.Empty_Set;
+      end if; -- Contains (Destination_List, ...
+      if Is_Empty (Human_Search_List) and Is_Empty (Elephant_Search_List) then
+         if Current_Element.Volume > Result then
             Result := Current_Element.Volume;
-            Put_Line (Result'Img);
-            for L in Iterate (Path_Log) loop
-               Put_Line (Times'Image (Times'Last - Teaching_Time - Element (L).Time) & " " & Element (L).Operator'Img & " " & Element (L).Room & Element (L).Volume'Img);
-            end loop;
-            New_Line;
          end if; -- Current_Element.Volume > Result
       elsif Current_Element.Operator_State (Elephant).Remaining >
         Current_Element.Operator_State (Human).Remaining then
-         for E in Iterate (Current_Element.Valves_to_Open) loop
+         for E in Iterate (Elephant_Search_List) loop
             Next_Element := Current_Element;
-            if Is_Valid (Release_Table, Element (E), Elephant,
-                         Next_Element) then
-               Set_Next (valve_List, Path_Length, Release_Table,
-                         Element (E), Elephant, Next_Element);
-               Path_Log_Element := (Next_Element.Operator_State (Elephant).Remaining, Elephant, Next_Element.Operator_State (Elephant).Room, Next_Element.Volume);
-               Append (Path_Log, Path_Log_Element);
-               Search_Two (Valve_List, Next_Element, Path_Length,
-                           Release_Table, Result, Path_Log);
-               Delete_Last (Path_Log);
-            else
-               for H in Iterate (Current_Element.Valves_to_Open) loop
-                  Next_Element := Current_Element;
-                  if Is_Valid (Release_Table, Element (H), Human,
-                               Next_Element) then
-                     Set_Next (valve_List, Path_Length, Release_Table,
-                               Element (H), Human, Next_Element);
-                     Path_Log_Element := (Next_Element.Operator_State (Human).Remaining, Human, Next_Element.Operator_State (Human).Room, Next_Element.Volume);
-                     Append (Path_Log, Path_Log_Element);
-                     Search_Two (Valve_List, Next_Element, Path_Length,
-                                 Release_Table, Result, Path_Log);
-                     Delete_Last (Path_Log);
-                  end if; -- Is_Valid (Release_Table, Element (H), Human, ...
-               end loop; -- H in Iterate (Current_Element.Valves_to_Open)
-            end if; -- Is_Valid (Release_Table, Element (H), Elephant, ...
-         end loop; -- E in Iterate (Current_Element.Valves_to_Open)
-      elsif Current_Element.Operator_State (Human).Remaining >
+            Set_Next (valve_List, Path_Length, Release_Table,
+                      Element (E), Elephant, Next_Element);
+            Search_Two (Valve_List, Next_Element, Path_Length,
+                        Release_Table, Destination_List, Result);
+         end loop; -- E in Iterate (Elephant_Search_List)
+      elsif Current_Element.Operator_State (Human).Remaining >=
         Current_Element.Operator_State (Elephant).Remaining then
-         for H in Iterate (Current_Element.Valves_to_Open) loop
+         -- Human has first choice if there is a tie
+         for H in Iterate (Human_Search_List) loop
             Next_Element := Current_Element;
-            if Is_Valid (Release_Table, Element (H), Human,
-                         Next_Element) then
-               Set_Next (valve_List, Path_Length, Release_Table,
-                         Element (H), Human, Next_Element);
-               Path_Log_Element := (Next_Element.Operator_State (Human).Remaining, Human, Next_Element.Operator_State (Human).Room, Next_Element.Volume);
-               Append (Path_Log, Path_Log_Element);
-               Search_Two (Valve_List, Next_Element, Path_Length,
-                           Release_Table, Result, Path_Log);
-               Delete_Last (Path_Log);
-            else
-               for E in Iterate (Current_Element.Valves_to_Open) loop
-                  Next_Element := Current_Element;
-                  if Is_Valid (Release_Table, Element (E), Elephant,
-                               Next_Element) then
-                     Set_Next (valve_List, Path_Length, Release_Table,
-                               Element (E), Elephant, Next_Element);
-                     Path_Log_Element := (Next_Element.Operator_State (Elephant).Remaining, Elephant, Next_Element.Operator_State (Elephant).Room, Next_Element.Volume);
-                     Append (Path_Log, Path_Log_Element);
-                     Search_Two (Valve_List, Next_Element, Path_Length,
-                                 Release_Table, Result, Path_Log);
-                     Delete_Last (Path_Log);
-                  end if; -- Is_Valid (Release_Table, Element (H), Elephant, ...
-               end loop; -- E in Iterate (Current_Element.Valves_to_Open)
-            end if; -- Is_Valid (Release_Table, Element (H), Human, ...
-         end loop; -- H in Iterate (Current_Element.Valves_to_Open)
-      else
-         -- Equal times remaining
-         for E in Iterate (Current_Element.Valves_to_Open) loop
-            for H in Iterate (Current_Element.Valves_to_Open) loop
-               if Element (E) /= Element (H) then
-                  Next_Element := Current_Element;
-                  Valves_Operated := 0;
-                  if Is_Valid (Release_Table, Element (E), Elephant,
-                               Next_Element) then
-                     Set_Next (valve_List, Path_Length, Release_Table,
-                               Element (E), Elephant, Next_Element);
-                     Path_Log_Element := (Next_Element.Operator_State (Elephant).Remaining, Elephant, Next_Element.Operator_State (Elephant).Room, Next_Element.Volume);
-                     Append (Path_Log, Path_Log_Element);
-                     Valves_Operated := @ + 1;
-                  end if; -- Is_Valid (Release_Table, Element (H), Elephant, ...
-                  if Is_Valid (Release_Table, Element (H), Human,
-                               Next_Element) then
-                     Set_Next (valve_List, Path_Length, Release_Table,
-                               Element (H), Human, Next_Element);
-                     Path_Log_Element := (Next_Element.Operator_State (Human).Remaining, Human, Next_Element.Operator_State (Human).Room, Next_Element.Volume);
-                     Append (Path_Log, Path_Log_Element);
-                     Valves_Operated := @ + 1;
-                  end if; -- Is_Valid (Release_Table, Element (H), Human, ...
-                  if Valves_Operated > 0 then
-                     Search_Two (Valve_List, Next_Element, Path_Length,
-                                 Release_Table, Result, Path_Log);
-                  end if; -- Valves_Operated > 0
-                  for C in Natural range 1 .. Valves_Operated loop
-                     Delete_Last (Path_Log);
-                  end loop; -- C in Natural range 1 .. Valves_Operated
-               end if; -- Element (E) /= Element (H)
-            end loop; -- H in Iterate (Current_Element.Valves_to_Open)
-         end loop; -- E in Iterate (Current_Element.Valves_to_Open)
-      end if; -- (Current_Element.Operator_State (Human).Remaining <= ...
+            Set_Next (valve_List, Path_Length, Release_Table,
+                      Element (H), Human, Next_Element);
+            Search_Two (Valve_List, Next_Element, Path_Length,
+                        Release_Table, Destination_List, Result);
+         end loop; -- H in Iterate (Human_Search_List)
+      end if; -- Is_Empty (Human_Search_List) and ...
    end Search_Two;
 
    Valve_List : Valve_Lists.Map;
    Path_Length : Path_Lengths.Map;
    Release_Table : Release_Tables.Map;
-   Valves_to_Open : Destinations.Set :=  Destinations.Empty_Set;
+   Destination_List : Destination_Lists.Map;
+   Valves_to_Open : Destinations.Set := Destinations.Empty_Set;
    Current_Element : State_Elements;
    Part_One_Result, Part_Two_Result : Volumes := 0;
-   Path_Log : Path_Logs.Vector := Path_Logs.Empty_Vector;
 
 begin -- December_16
    Read_Input (Valve_List);
@@ -443,12 +376,9 @@ begin -- December_16
          Include (Valves_to_Open, Key (V));
       end if; -- Valve_List (V).Flowrate > 0
    end loop; -- V in iterate (Valve_List)
-   Put_Line ("Find_Shortest_Path");
    Find_Shortest_Path (Valve_List, Valves_to_Open, Path_Length);
-   DJH.Execution_Time.Put_CPU_Time;
-   Put_Line ("Build_Release_Table");
-   Build_Release_Table (Valve_List, Path_Length, Release_Table);
-   DJH.Execution_Time.Put_CPU_Time;
+   Build_Release_Table (Valve_List, Path_Length, Release_Table,
+                        Destination_List);
    Current_Element := (Volume => 0,
                        Valves_to_Open => Valves_to_Open,
                        Operator_State => (Human => (Room => Starting_Room,
@@ -456,7 +386,7 @@ begin -- December_16
                                           Elephant => (Room => Starting_Room,
                                                        Remaining => 0)));
    Search_One (Valve_List, Current_Element, Path_Length, Release_Table,
-               Part_One_Result);
+               Destination_List, Part_One_Result);
    Put_Line ("Part one:" & Part_One_Result'Img);
    DJH.Execution_Time.Put_CPU_Time;
    Current_Element := (Volume => 0,
@@ -468,7 +398,7 @@ begin -- December_16
                                                        Remaining => Times'Last -
                                                          Teaching_Time)));
    Search_Two (Valve_List, Current_Element, Path_Length, Release_Table,
-               Part_Two_Result, Path_Log);
+               Destination_List, Part_Two_Result);
    Put_Line ("Part two:" & Part_Two_Result'Img);
    DJH.Execution_Time.Put_CPU_Time;
 end December_16;
