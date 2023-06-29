@@ -8,18 +8,16 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Exceptions; use Ada.Exceptions;
 with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Ordered_Maps;
+with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
 with DJH.Execution_Time; use DJH.Execution_Time;
 
 procedure December_22 is
 
-   subtype X_Ordinates is Integer;
-
-   subtype Y_Ordinates is Natural;
+   subtype Ordinates is Natural;
 
    type Coordinates is record
-      X : X_Ordinates;
-      Y : Y_Ordinates;
+      X, Y : Ordinates;
    end record; -- Coordinates
 
    type Jungle_Elements is (Path, Wall);
@@ -27,19 +25,20 @@ procedure December_22 is
    function "<" (Left, Right : Coordinates) return Boolean is
      (Left.Y < Right.Y or (Left.Y = Right.Y and Left.X < Right.X));
 
-   function "=" (Left, Right : Coordinates) return Boolean is
-     (Left.X = Right.X and Left.Y = Right.Y);
-
    package Jungle_Maps is new
      Ada.Containers.Ordered_Maps (Coordinates, Jungle_Elements);
    use  Jungle_Maps;
 
-   type Directions is (West, South, East, North);
-   -- CW rotation order stsrt West
+   type Directions is mod 4;
+   -- CW rotation order starting from East
+   East : constant Directions := 0;
+   South : constant Directions := 1;
+   West : constant Directions := 2;
+   North : constant Directions := 3;
 
    type Positions is record
       Coordinate: Coordinates := (1, 1);
-      Facing : Directions := West;
+      Facing : Directions := East;
    end record; -- Positions
 
    type Turns is (ACW, CW, None);
@@ -53,13 +52,27 @@ procedure December_22 is
      Ada.Containers.Vectors (Positive, Instructions);
    use Instruction_Lists;
 
+   package Vertex_Sets is new Ada.Containers.Ordered_Sets (Coordinates);
+   use Vertex_Sets;
+
+   function "<" (Left, Right : Positions) return Boolean is
+     (Left.Coordinate.X < Right.Coordinate.X or (
+      Left.Coordinate.X = Right.Coordinate.X and
+        (Left.Coordinate.Y < Right.Coordinate.Y or
+           (Left.Coordinate.Y = Right.Coordinate.Y and
+                Left.Facing < Right.Facing))));
+
+   package Edge_Pairs is new
+     Ada.Containers.Ordered_Maps (Positions, Coordinates);
+   use Edge_Pairs;
+
    procedure Read_Input (Jungle_Map : out Jungle_Maps.Map;
                          Instructions_List : out Instruction_Lists.Vector) is
 
       Turn_Set : constant Character_Set := To_Set ("LR");
       Input_File : File_Type;
       Text : Unbounded_String;
-      Y : Y_Ordinates := 1;
+      Y : Ordinates := 1;
       Start_At, First : Positive;
       Last : Natural;
       Instruction : Instructions;
@@ -129,17 +142,9 @@ procedure December_22 is
          begin -- Turn
             case Instruction.Turn is
                when ACW =>
-                  if Position.Facing = Directions'First then
-                     Position.Facing := Directions'Last;
-                  else
-                     Position.Facing := Directions'Pred (Position.Facing);
-                  end if; -- Instruction.Turn = ACW
+                  Position.Facing := @ - 1;
                when CW =>
-                  if Position.Facing = Directions'Last then
-                     Position.Facing := Directions'First;
-                  else
-                     Position.Facing := Directions'Succ (Position.Facing);
-                  end if;
+                  Position.Facing := @ + 1;
                when None =>
                   null; -- last instruction does not have a turn
             end case; -- Instruction.Turn
@@ -152,7 +157,7 @@ procedure December_22 is
          loop -- Step
             Test := Position.Coordinate;
             case Position.Facing is
-               when West =>
+               when East =>
                   Test.X := Test.X + 1;
                   if Contains (Jungle_Map, Test) then
                      if Jungle_Map (Test) = Wall then
@@ -190,7 +195,7 @@ procedure December_22 is
                         Instruction.Steps := 1;
                      end if; -- Jungle_Map (Test) = Wall
                   end if; -- Contains (Jungle_Map, Test)
-               when East =>
+               when West =>
                   Test.X := Test.X - 1;
                   if Contains (Jungle_Map, Test) then
                      if Jungle_Map (Test) = Wall then
@@ -248,16 +253,165 @@ procedure December_22 is
          Move (Instruction_List (I), Position);
       end loop; -- I in Iterate (Instruction_List)
       return 1000 * Position.Coordinate.Y + 4 * Position.Coordinate.X +
-        Directions'Pos (Position.Facing);
+        Ordinates (Position.Facing);
    end Walk_Path;
+
+   function Side_Length (Jungle_Map : in Jungle_Maps.Map) return Positive is
+
+      X_Min, Y_Min, Side : Ordinates := Ordinates'Last;
+      X_Max, Y_Max : Ordinates := Ordinates'First;
+      Side_Min, Side_Max : Ordinates;
+
+   begin -- Side_Length
+      for J in Iterate (Jungle_Map) loop
+         if Key (J).X < X_Min then
+            X_Min := Key (J).X;
+         end if; -- Key (J).X < X_Min
+         if Key (J).X > X_Max then
+            X_Max := Key (J).X;
+         end if; -- Key (J).X > X_Max
+         if Key (J).Y < Y_Min then
+            Y_Min := Key (J).Y;
+         end if; -- Key (J).Y < Y_Min
+         if Key (J).Y > Y_Max then
+            Y_Max := Key (J).Y;
+         end if; -- Key (J).Y > Y_Max
+      end loop; -- J in Iterate (Jungle_Map)
+      -- find the mimimum width containing Jungle_Map
+      for Y in Ordinates range Y_Min .. Y_Max loop
+         Side_Min := Ordinates'Last;
+         Side_Max := Ordinates'First;
+         for X in Ordinates range X_Min .. X_Max loop
+            if Contains (Jungle_Map, (X, Y)) then
+               if X < Side_Min then
+                  Side_Min := X;
+               end if; -- X < Side_Min
+               if X > Side_Max then
+                  Side_Max := X;
+               end if; -- X > Side_Max
+            end if; -- Contains (Jungle_Map, (X, Y, 0))
+         end loop; -- X in Ordinates range X_Min .. X_Max
+         if Side > Side_Max - Side_Min + 1 then
+            Side := Side_Max - Side_Min + 1;
+         end if; -- Side > Side_Max - Side_Min + 1
+      end loop; -- Y in Ordinates range Y_Min .. Y_Max
+      return Side;
+   end Side_Length;
+
+   procedure Find_Edges (Jungle_Map : in Jungle_Maps.Map;
+                         Edge_Pair : out Edge_Pairs.Map;
+                         Internal_Vertex : out Vertex_Sets.Set;
+                         External_Vertex : out Vertex_Sets.Set) is
+
+      Neighbours : Natural;
+      Dummy : constant Coordinates := (Ordinates'First, Ordinates'First);
+      -- Coordinates of the adjoining edge not Known.
+
+   begin -- Find_Edges
+      Clear (Edge_Pair);
+      Clear (Internal_Vertex);
+      Clear (External_Vertex);
+      for I in Iterate (Jungle_Map) loop
+         Neighbours := 0;
+         if Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y)) then
+            Neighbours := @ + 1;
+         else
+            Insert (Edge_Pair, (Key (I), West), Dummy);
+         end if; -- Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y))
+         if Contains (Jungle_Map, (Key (I).X + 1, Key (I).Y)) then
+            Neighbours := @ + 1;
+         else
+            Insert (Edge_Pair, (Key (I), East), Dummy);
+         end if; -- Contains (Jungle_Map, (Key (I).X + 1, Key (I).Y))
+         if Contains (Jungle_Map, (Key (I).X, Key (I).Y - 1)) then
+            Neighbours := @ + 1;
+         else
+            Insert (Edge_Pair, (Key (I), North), Dummy);
+         end if; -- Contains (Jungle_Map, (Key (I).X, Key (I).Y - 1))
+         if Contains (Jungle_Map, (Key (I).X, Key (I).Y + 1)) then
+            Neighbours := @ + 1;
+         else
+            Insert (Edge_Pair, (Key (I), South), Dummy);
+         end if; -- Contains (Jungle_Map, (Key (I).X, Key (I).Y + 1))
+         -- Count diagonal neighbours
+         if Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y + 1)) then
+            Neighbours := @ + 1;
+         end if; -- Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y + 1))
+         if Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y - 1)) then
+            Neighbours := @ + 1;
+         end if; -- Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y - 1)
+         if Contains (Jungle_Map, (Key (I).X + 1, Key (I).Y + 1)) then
+            Neighbours := @ + 1;
+         end if; -- Contains (Jungle_Map, (Key (I).X - 1, Key (I).Y + 1))
+         if Contains (Jungle_Map, (Key (I).X + 1, Key (I).Y - 1)) then
+            Neighbours := @ + 1;
+         end if; -- Contains (Jungle_Map, (Key (I).X + 1, Key (I).Y + 1))
+         if Neighbours = 3 then
+            Include (External_Vertex, Key (I));
+         elsif Neighbours = 7 then
+            Include (Internal_Vertex, Key (I));
+         end if; -- Neighbours = 3
+      end loop; -- I in Iterate (Jungle_Map)
+   end Find_Edges;
+
+   procedure Match (Internal_Vertex : out Vertex_Sets.Set;
+                    External_Vertex : out Vertex_Sets.Set;
+                    Edge_Pair : in out Edge_Pairs.Map) is
+
+      function Next (Edge_Pair : in Edge_Pairs.Map;
+                     Ec : in Edge_Pairs.Cursor;
+                     Direction : in Directions) return Edge_Pairs.Cursor is
+
+         -- Position need not be a member of the edge set, that is, it may be an
+         -- internal vertex.
+
+         Test_Position : Positions := Key (Ec);
+
+      begin -- Next
+         if Test_Position.Facing /= Direction + 1 and
+           Test_Position.Facing /= Direction - 1 then
+            raise Program_Error with "Search direction not along edge";
+         end if; -- Test_Position.Facing /= Direction + 1 and ...
+         case Direction is
+         when East =>
+            Test_Position.Coordinate.X := @ + 1;
+         when West =>
+            Test_Position.Coordinate.X := @ - 1;
+         when North =>
+            Test_Position.Coordinate.Y := @ - 1;
+         when South =>
+            Test_Position.Coordinate.Y := @ + 1;
+         end case; -- Direction
+         return Find (Edge_Pair, Test_Position);
+      end Next;
+
+   begin -- Match
+   end Match;
 
    Jungle_Map : Jungle_Maps.Map;
    Instruction_List : Instruction_Lists.Vector;
+   Side : Ordinates;
+   Edge_Pair : Edge_Pairs.Map;
+   Internal_Vertex, External_Vertex : Vertex_Sets.Set;
 
 begin -- December_22
    Read_Input (Jungle_Map, Instruction_List);
    Put_Line ("Part one:" & Walk_Path (Jungle_Map, Instruction_List)'Img);
    DJH.Execution_Time.Put_CPU_Time;
+   Side := Side_Length (Jungle_Map);
+   Find_Edges (Jungle_Map, Edge_Pair, Internal_Vertex, External_Vertex);
+   Put_Line ("Edges:");
+   for E in Iterate (Edge_Pair) loop
+      Put_Line (Key (E).Coordinate.X'Img & Key (E).Coordinate.Y'Img & Key (E).Facing'Img);
+   end loop;
+   Put_Line ("Internal Vertices");
+   for V in Iterate (Internal_Vertex) loop
+      Put_Line (Element (V).X'Img & Element (V).Y'Img);
+   end loop;
+   Put_Line ("External Vertices");
+   for V in Iterate (External_Vertex) loop
+      Put_Line (Element (V).X'Img & Element (V).Y'Img);
+   end loop;
    Put_Line ("Part two:");
    DJH.Execution_Time.Put_CPU_Time;
 end December_22;
