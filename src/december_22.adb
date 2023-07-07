@@ -41,6 +41,10 @@ procedure December_22 is
       Facing : Directions := East;
    end record; -- Positions
 
+   Dummy : constant Positions := ((Ordinates'First, Ordinates'First),
+                                  Directions'First);
+   -- Coordinates and Direction of the adjoining edge not Known.
+
    type Turns is (ACW, CW, None);
 
    type Instructions is record
@@ -63,7 +67,7 @@ procedure December_22 is
                 Left.Facing < Right.Facing))));
 
    package Edge_Pairs is new
-     Ada.Containers.Ordered_Maps (Positions, Coordinates);
+     Ada.Containers.Ordered_Maps (Positions, Positions);
    use Edge_Pairs;
 
    procedure Read_Input (Jungle_Map : out Jungle_Maps.Map;
@@ -304,8 +308,6 @@ procedure December_22 is
                          External_Vertex : out Vertex_Sets.Set) is
 
       Neighbours : Natural;
-      Dummy : constant Coordinates := (Ordinates'First, Ordinates'First);
-      -- Coordinates of the adjoining edge not Known.
 
    begin -- Find_Edges
       Clear (Edge_Pair);
@@ -354,16 +356,21 @@ procedure December_22 is
       end loop; -- I in Iterate (Jungle_Map)
    end Find_Edges;
 
-   procedure Match (Internal_Vertex : out Vertex_Sets.Set;
-                    External_Vertex : out Vertex_Sets.Set;
+   procedure Match (Internal_Vertex : in Vertex_Sets.Set;
+                    External_Vertex : in Vertex_Sets.Set;
                     Edge_Pair : in out Edge_Pairs.Map) is
+
+      type State_Elements is record
+         Direction : Directions := Directions'First;
+         Change : Boolean := False;
+         Ec, Ec_Next : Edge_Pairs.Cursor := Edge_Pairs.No_Element;
+      end record; --State_Elements
+
+      type States is array (Boolean) of State_Elements;
 
       function Next (Edge_Pair : in Edge_Pairs.Map;
                      Ec : in Edge_Pairs.Cursor;
                      Direction : in Directions) return Edge_Pairs.Cursor is
-
-         -- Position need not be a member of the edge set, that is, it may be an
-         -- internal vertex.
 
          Test_Position : Positions := Key (Ec);
 
@@ -385,7 +392,111 @@ procedure December_22 is
          return Find (Edge_Pair, Test_Position);
       end Next;
 
+      procedure From_Internal (Vertex : in Coordinates;
+                               Edge_Pair : in out Edge_Pairs.Map) is
+
+         -- Match edges stepping away from an internal vertex until two changes
+         -- in direction are encountered or a vertex that has already been
+         -- matched fas been found.
+
+         State : States;
+         Finished, Found : Boolean := False;
+         Test_Edge : Positions;
+
+      begin -- From_Internal
+         for D in Directions loop
+            Test_Edge.Facing := D;
+            Test_Edge.Coordinate := (Vertex.X - 1, Vertex.Y);
+            if Contains (Edge_Pair, Test_Edge) then
+               State (Found).Direction := West;
+               State (Found).Ec := Find (Edge_Pair, Test_Edge);
+               Found := True;
+            end if; -- Contains (Edge_Pair, Test_Edge)
+            Test_Edge.Coordinate := (Vertex.X + 1, Vertex.Y);
+            if Contains (Edge_Pair, Test_Edge) then
+               State (Found).Direction := East;
+               State (Found).Ec := Find (Edge_Pair, Test_Edge);
+               Found := True;
+            end if; -- Contains (Edge_Pair, Test_Edge)
+            Test_Edge.Coordinate := (Vertex.X, Vertex.Y - 1);
+            if Contains (Edge_Pair, Test_Edge) then
+               State (Found).Direction := North;
+               State (Found).Ec := Find (Edge_Pair, Test_Edge);
+               Found := True;
+            end if; -- Contains (Edge_Pair, Test_Edge)
+            Test_Edge.Coordinate := (Vertex.X, Vertex.Y + 1);
+            if Contains (Edge_Pair, Test_Edge) then
+               State (Found).Direction := South;
+               State (Found).Ec := Find (Edge_Pair, Test_Edge);
+               Found := True;
+            end if; -- Contains (Edge_Pair, Test_Edge)
+         end loop; -- D in Directions
+         Edge_Pair (State (True).Ec) := Key (State (False).Ec);
+         Edge_Pair (State (False).Ec) := Key (State (True).Ec);
+         while not Finished loop
+            for E in Boolean loop
+               State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
+                                          State (E).Direction);
+               if State (E).Ec_Next = Edge_Pairs.No_Element then
+                  if State (E).Change then
+                     -- found second external vertex
+                     Finished := True;
+                  else
+                     -- found first external vertex
+                     State (E).Change := True;
+                     if Contains (Edge_Pair, (Key (State(E).Ec).Coordinate,
+                                  State(E).Direction)) then
+                        State (E).Ec :=
+                          Find (Edge_Pair, (Key (State(E).Ec).Coordinate,
+                                State(E).Direction));
+                        State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
+                                                   State (E).Direction + 1);
+                        if State (E).Ec_Next /= Edge_Pairs.No_Element then
+                           State (E).Direction := @ + 1;
+
+                        else
+                           State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
+                                                   State (E).Direction - 1);
+                           if State (E).Ec_Next /= Edge_Pairs.No_Element then
+                              State (E).Direction := @ - 1;
+                           else
+                              raise Program_Error with
+                                "Could not find new edge direction" &
+                                Element (State (E).Ec)'Img;
+                           end if; -- State (E).Ec_Next /= Edge_Pairs.No_Elemen
+                        end if; -- State (E).Ec_Next /= Edge_Pairs.No_Element
+                     else
+                        raise Program_Error with
+                          "Expected next element is facing in edge direction";
+                     end if; -- Contains (Edge_Pair, (Key (State(E).Ec) ..
+                  end if; -- State (E).Change
+               end if; -- State (E).Ec_Next = Edge_Pairs.No_Element
+            end loop; -- E in Boolean
+            if State (True).Ec_Next /= Edge_Pairs.No_Element and
+              State (False).Ec_Next /= Edge_Pairs.No_Element then
+               -- Edge pairs exist
+               if Edge_Pair (State (True).Ec_Next) = Dummy and
+                 Edge_Pair (State (False).Ec_Next) = Dummy then
+                  -- not already matched
+                  State (True).Ec := State (True).Ec_Next;
+                  State (False).Ec := State (False).Ec_Next;
+                  Edge_Pair (State (True).Ec) := Key (State (False).Ec);
+                  Edge_Pair (State (False).Ec) := Key (State (True).Ec);
+               else
+                  Finished := True;
+               end if; -- Edge_Pair (State (True).Ec_Next) = Dummy and ...
+            else
+               Finished := True;
+            end if; -- State (True).Ec_Next /= Edge_Pairs.No_Element and ...
+            Finished := @ or (State (True).Change and State (False).Change);
+         end loop; -- not Finished
+      end From_Internal;
+
    begin -- Match
+      --  for V in Iterate (Internal_Vertex) loop
+      --     From_Internal (Element (V), Edge_Pair);
+      --  end loop; -- V in Iterate (Internal_Vertex)
+      From_Internal (First_Element (Internal_Vertex), Edge_Pair);
    end Match;
 
    Jungle_Map : Jungle_Maps.Map;
@@ -400,10 +511,6 @@ begin -- December_22
    DJH.Execution_Time.Put_CPU_Time;
    Side := Side_Length (Jungle_Map);
    Find_Edges (Jungle_Map, Edge_Pair, Internal_Vertex, External_Vertex);
-   Put_Line ("Edges:");
-   for E in Iterate (Edge_Pair) loop
-      Put_Line (Key (E).Coordinate.X'Img & Key (E).Coordinate.Y'Img & Key (E).Facing'Img);
-   end loop;
    Put_Line ("Internal Vertices");
    for V in Iterate (Internal_Vertex) loop
       Put_Line (Element (V).X'Img & Element (V).Y'Img);
@@ -411,6 +518,11 @@ begin -- December_22
    Put_Line ("External Vertices");
    for V in Iterate (External_Vertex) loop
       Put_Line (Element (V).X'Img & Element (V).Y'Img);
+   end loop;
+   Match (Internal_Vertex, External_Vertex, Edge_Pair);
+   Put_Line ("Edges:");
+   for E in Iterate (Edge_Pair) loop
+      Put_Line (Key (E).Coordinate.X'Img & Key (E).Coordinate.Y'Img & Key (E).Facing'Img & Element (E).Coordinate.X'Img & Element (E).Coordinate.Y'Img & Element (E).Facing'Img);
    end loop;
    Put_Line ("Part two:");
    DJH.Execution_Time.Put_CPU_Time;
