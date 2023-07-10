@@ -446,25 +446,24 @@ procedure December_22 is
                      State (E).Change := True;
                      if Contains (Edge_Pair, (Key (State(E).Ec).Coordinate,
                                   State(E).Direction)) then
-                        State (E).Ec :=
+                        State (E).Ec_Next := Find (Edge_Pair, (Key (State(E).Ec).Coordinate,
+                                  State(E).Direction));
+                        State (E).Ec_Next :=
                           Find (Edge_Pair, (Key (State(E).Ec).Coordinate,
                                 State(E).Direction));
-                        State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
-                                                   State (E).Direction + 1);
-                        if State (E).Ec_Next /= Edge_Pairs.No_Element then
+                        if Next (Edge_Pair, State (E).Ec_Next,
+                                 State (E).Direction + 1) /=
+                          Edge_Pairs.No_Element then
                            State (E).Direction := @ + 1;
-
-                        else
-                           State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
-                                                   State (E).Direction - 1);
-                           if State (E).Ec_Next /= Edge_Pairs.No_Element then
+                        elsif Next (Edge_Pair, State (E).Ec_Next,
+                                    State (E).Direction - 1) /=
+                          Edge_Pairs.No_Element then
                               State (E).Direction := @ - 1;
-                           else
-                              raise Program_Error with
-                                "Could not find new edge direction" &
-                                Element (State (E).Ec)'Img;
-                           end if; -- State (E).Ec_Next /= Edge_Pairs.No_Elemen
-                        end if; -- State (E).Ec_Next /= Edge_Pairs.No_Element
+                        else
+                           raise Program_Error with
+                             "Could not find new edge direction" &
+                             Element (State (E).Ec)'Img;
+                        end if; -- Next (Edge_Pair, State (E).Ec ...
                      else
                         raise Program_Error with
                           "Expected next element is facing in edge direction";
@@ -472,8 +471,10 @@ procedure December_22 is
                   end if; -- State (E).Change
                end if; -- State (E).Ec_Next = Edge_Pairs.No_Element
             end loop; -- E in Boolean
+            Finished := @ or (State (True).Change and State (False).Change);
             if State (True).Ec_Next /= Edge_Pairs.No_Element and
-              State (False).Ec_Next /= Edge_Pairs.No_Element then
+              State (False).Ec_Next /= Edge_Pairs.No_Element and
+              not Finished then
                -- Edge pairs exist
                if Edge_Pair (State (True).Ec_Next) = Dummy and
                  Edge_Pair (State (False).Ec_Next) = Dummy then
@@ -488,15 +489,75 @@ procedure December_22 is
             else
                Finished := True;
             end if; -- State (True).Ec_Next /= Edge_Pairs.No_Element and ...
-            Finished := @ or (State (True).Change and State (False).Change);
          end loop; -- not Finished
       end From_Internal;
 
+      function Unresolved_Vertex (External_Vertex : in Vertex_Sets.Set;
+                                  Edge_Pair : in Edge_Pairs.Map)
+                                  return Vertex_Sets.Cursor is
+
+         -- Returns the first external vertex with only one edge element that
+         -- has not been matched. Returns Vertex_Sets.No_Element if no such
+         -- external vertex exists.
+
+         Vc : Vertex_Sets.Cursor := First (External_Vertex);
+         Count : Natural := 0;
+
+      begin -- Unresolved_Vertex
+         while Count /= 1 and Vc /= Vertex_Sets.No_Element loop
+            Count := 0;
+            for D in Directions loop
+               if Contains (Edge_Pair, (Element (Vc), D)) and then
+                  Edge_Pair ((Element (Vc), D)) = Dummy then
+                  Count := @ + 1;
+               end if; -- Contains (Edge_Pair, (Element (Vc), D)) and then ...
+            end loop; -- D in Directions
+            Next (Vc);
+         end loop; -- Count /= 1 and Vc /= Vertex_Sets.No_Element
+         return Vc;
+      end Unresolved_Vertex;
+
+      procedure From_External (Vertex : in Coordinates;
+                               Edge_Pair : in out Edge_Pairs.Map) is
+
+         -- Starting from an external vertex which has only one matched edge,
+         -- searches along contigueous matched edges until the first unmatched
+         -- edge element is found. This is matched with the unmatched element at
+         -- the vertex. Matching continues until another vertex is encountered
+         -- or an edge element that has already been matched is found.
+
+         State : States;
+         Finished : Boolean := False;
+
+      begin -- From_External
+         -- Find unmatched edge element at vertex
+         for D in Directions loop
+            if Contains (Edge_Pair, (Vertex, D)) and then
+              Edge_Pair (Vertex, D)) = Dummy then
+               State (True).Ec := Find (Edge_Pair, (Vertex, D));
+            end if; -- Contains (Edge_Pair, (Vertex, D)) and then ...
+         end loop; -- D in Directions
+         if Next (Edge_Pair, Element (State (True).Ec).Facing - 1) /=
+           Edge_Pairs.No_Element and then
+           Element (Next (Edge_Pair, Element (State (True).Ec).Facing - 1)) =
+             Dummy then
+            State (True).Direction := Element (State (True).Ec).Facing - 1;
+         elsif Next (Edge_Pair, Element (State (True).Ec).Facing + 1) /=
+           Edge_Pairs.No_Element and then
+           Element (Next (Edge_Pair, Element (State (True).Ec).Facing + 1)) =
+             Dummy then
+            State (True).Direction := Element (State (True).Ec).Facing - 1;
+         else
+            raise Program_Error with "Unmatched edge
+         end if;
+      end From_External;
+
+
    begin -- Match
-      --  for V in Iterate (Internal_Vertex) loop
-      --     From_Internal (Element (V), Edge_Pair);
-      --  end loop; -- V in Iterate (Internal_Vertex)
-      From_Internal (First_Element (Internal_Vertex), Edge_Pair);
+      for V in Iterate (Internal_Vertex) loop
+         From_Internal (Element (V), Edge_Pair);
+      end loop; -- V in Iterate (Internal_Vertex)
+      Put_Line ("Unresolved " & Element (Unresolved_Vertex (External_Vertex, Edge_Pair))'Img);
    end Match;
 
    Jungle_Map : Jungle_Maps.Map;
