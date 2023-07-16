@@ -1,12 +1,11 @@
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Command_Line; use Ada.Command_Line;
 with Ada.Text_IO.Unbounded_IO; use Ada.Text_IO.Unbounded_IO;
-with Ada.Strings.maps; use Ada.Strings.maps;
 with Ada.Strings; use Ada.Strings;
+with Ada.Strings.maps; use Ada.Strings.maps;
 with Ada.Strings.maps.Constants; use Ada.Strings.maps.Constants;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Exceptions; use Ada.Exceptions;
-with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Ordered_Maps;
 with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
@@ -35,6 +34,8 @@ procedure December_22 is
    South : constant Directions := 1;
    West : constant Directions := 2;
    North : constant Directions := 3;
+   D90 : constant Directions := 1; -- add or subtract for 90 degrees
+   D180 : constant Directions := 2; -- add for reversal in direction
 
    type Positions is record
       Coordinate: Coordinates := (1, 1);
@@ -133,175 +134,6 @@ procedure December_22 is
          raise;
    end Read_Input;
 
-   function Walk_Path (Jungle_Map : in Jungle_Maps.Map;
-                       Instruction_List : in Instruction_Lists.Vector)
-                       return Positive is
-
-      procedure Move (Instruction_In : Instructions;
-                      Position : in out Positions) is
-
-         procedure Turn (Instruction : in Instructions;
-                         Position : in out Positions) is
-
-         begin -- Turn
-            case Instruction.Turn is
-               when ACW =>
-                  Position.Facing := @ - 1;
-               when CW =>
-                  Position.Facing := @ + 1;
-               when None =>
-                  null; -- last instruction does not have a turn
-            end case; -- Instruction.Turn
-         end Turn;
-
-         Instruction : Instructions := Instruction_In;
-         Test : Coordinates;
-
-      begin -- Move
-         loop -- Step
-            Test := Position.Coordinate;
-            case Position.Facing is
-               when East =>
-                  Test.X := Test.X + 1;
-                  if Contains (Jungle_Map, Test) then
-                     if Jungle_Map (Test) = Wall then
-                        Test.X := Test.X - 1;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  else
-                     -- Wrap around
-                     Test.X := Test.X - 1;
-                     while Contains (Jungle_Map, Test) loop
-                        Test.X := Test.X - 1;
-                     end loop; -- Contains (Jungle_Map, Test)
-                     Test.X := Test.X + 1;
-                     if Jungle_Map (Test) = Wall then
-                        Test.X := Position.Coordinate.X;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  end if; -- Contains (Jungle_Map, Test)
-               when South =>
-                  Test.Y := Test.Y + 1;
-                  if Contains (Jungle_Map, Test) then
-                     if Jungle_Map (Test) = Wall then
-                        Test.Y := Test.Y - 1;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  else
-                     -- Wrap around
-                     Test.Y := Test.Y - 1;
-                     while Contains (Jungle_Map, Test) loop
-                        Test.Y := Test.Y - 1;
-                     end loop; -- Contains (Jungle_Map, Test)
-                     Test.Y := Test.Y + 1;
-                     if Jungle_Map (Test) = Wall then
-                        Test.Y := Position.Coordinate.Y;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  end if; -- Contains (Jungle_Map, Test)
-               when West =>
-                  Test.X := Test.X - 1;
-                  if Contains (Jungle_Map, Test) then
-                     if Jungle_Map (Test) = Wall then
-                        Test.X := Test.X + 1;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  else
-                     -- Wrap around
-                     Test.X := Test.X + 1;
-                     while Contains (Jungle_Map, Test) loop
-                        Test.X := Test.X + 1;
-                     end loop; -- Contains (Jungle_Map, Test)
-                     Test.X := Test.X - 1;
-                     if Jungle_Map (Test) = Wall then
-                        Test.X := Position.Coordinate.X;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  end if; -- Contains (Jungle_Map, Test)
-               when North =>
-                  Test.Y := Test.Y - 1;
-                  if Contains (Jungle_Map, Test) then
-                     if Jungle_Map (Test) = Wall then
-                        Test.Y := Test.Y + 1;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  else
-                     -- Wrap around
-                     Test.Y := Test.Y + 1;
-                     while Contains (Jungle_Map, Test) loop
-                        Test.Y := Test.Y + 1;
-                     end loop; -- Contains (Jungle_Map, Test)
-                     Test.Y := Test.Y - 1;
-                     if Jungle_Map (Test) = Wall then
-                        Test.Y := Position.Coordinate.Y;
-                        Instruction.Steps := 1;
-                     end if; -- Jungle_Map (Test) = Wall
-                  end if; -- Contains (Jungle_Map, Test)
-            end case; -- Position.Facing
-            Position.Coordinate := Test;
-            exit when Instruction.Steps = 1;
-            Instruction.Steps := Instruction.Steps - 1;
-         end loop; -- Step
-         Turn (Instruction, Position);
-      end Move;
-
-      Position : Positions;
-
-   begin -- Walk_Path
-      loop -- find start of path
-         exit when Contains (Jungle_Map, Position.Coordinate) and then
-           Jungle_Map ( Position.Coordinate) = Path;
-         Position.Coordinate.X := Position.Coordinate.X + 1;
-      end loop; -- find start of path
-      for I in Iterate (Instruction_List) loop
-         Move (Instruction_List (I), Position);
-      end loop; -- I in Iterate (Instruction_List)
-      return 1000 * Position.Coordinate.Y + 4 * Position.Coordinate.X +
-        Ordinates (Position.Facing);
-   end Walk_Path;
-
-   function Side_Length (Jungle_Map : in Jungle_Maps.Map) return Positive is
-
-      X_Min, Y_Min, Side : Ordinates := Ordinates'Last;
-      X_Max, Y_Max : Ordinates := Ordinates'First;
-      Side_Min, Side_Max : Ordinates;
-
-   begin -- Side_Length
-      for J in Iterate (Jungle_Map) loop
-         if Key (J).X < X_Min then
-            X_Min := Key (J).X;
-         end if; -- Key (J).X < X_Min
-         if Key (J).X > X_Max then
-            X_Max := Key (J).X;
-         end if; -- Key (J).X > X_Max
-         if Key (J).Y < Y_Min then
-            Y_Min := Key (J).Y;
-         end if; -- Key (J).Y < Y_Min
-         if Key (J).Y > Y_Max then
-            Y_Max := Key (J).Y;
-         end if; -- Key (J).Y > Y_Max
-      end loop; -- J in Iterate (Jungle_Map)
-      -- find the mimimum width containing Jungle_Map
-      for Y in Ordinates range Y_Min .. Y_Max loop
-         Side_Min := Ordinates'Last;
-         Side_Max := Ordinates'First;
-         for X in Ordinates range X_Min .. X_Max loop
-            if Contains (Jungle_Map, (X, Y)) then
-               if X < Side_Min then
-                  Side_Min := X;
-               end if; -- X < Side_Min
-               if X > Side_Max then
-                  Side_Max := X;
-               end if; -- X > Side_Max
-            end if; -- Contains (Jungle_Map, (X, Y, 0))
-         end loop; -- X in Ordinates range X_Min .. X_Max
-         if Side > Side_Max - Side_Min + 1 then
-            Side := Side_Max - Side_Min + 1;
-         end if; -- Side > Side_Max - Side_Min + 1
-      end loop; -- Y in Ordinates range Y_Min .. Y_Max
-      return Side;
-   end Side_Length;
-
    procedure Find_Edges (Jungle_Map : in Jungle_Maps.Map;
                          Edge_Pair : out Edge_Pairs.Map;
                          Internal_Vertex : out Vertex_Sets.Set;
@@ -356,9 +188,122 @@ procedure December_22 is
       end loop; -- I in Iterate (Jungle_Map)
    end Find_Edges;
 
-   procedure Match (Internal_Vertex : in Vertex_Sets.Set;
-                    External_Vertex : in Vertex_Sets.Set;
-                    Edge_Pair : in out Edge_Pairs.Map) is
+   procedure Wrap_Match (Jungle_Map : in Jungle_Maps.Map;
+                         Edge_Pair : out Edge_Pairs.Map) is
+
+      -- Match pairs for part one, matches to opposide edge of map either
+      -- horizontally or vertically.
+
+      Test : Coordinates;
+
+   begin -- Wrap_Match
+      for Ec in Iterate (Edge_Pair) loop
+         Test := Key (Ec).Coordinate;
+         case Key (Ec).Facing is
+            when East =>
+               while Contains (Jungle_Map, Test) loop
+                  Test.X := @ - 1;
+               end loop; -- Contains (Jungle_Map, Test)
+               Test.X := @ + 1;
+            when South =>
+               while Contains (Jungle_Map, Test) loop
+                  Test.Y := @ - 1;
+               end loop; -- Contains (Jungle_Map, Test)
+               Test.Y := @ + 1;
+            when West =>
+               while Contains (Jungle_Map, Test) loop
+                  Test.X := @ + 1;
+               end loop; -- Contains (Jungle_Map, Test)
+               Test.X := @ - 1;
+            when North =>
+               while Contains (Jungle_Map, Test) loop
+                  Test.Y := @ + 1;
+               end loop; -- Contains (Jungle_Map, Test)
+               Test.Y := @ - 1;
+         end case; -- Key (Ec).Facing
+         Edge_Pair (Ec) := (Test, Key (Ec).Facing);
+      end loop; -- Ec in Iterate (Edge_Pair)
+   end Wrap_Match;
+
+   function Walk_Path (Jungle_Map : in Jungle_Maps.Map;
+                       Instruction_List : in Instruction_Lists.Vector;
+                       Edge_Pair : in Edge_Pairs.Map)
+                       return Positive is
+
+      procedure Move (Instruction_In : Instructions;
+                      Position : in out Positions;
+                      Edge_Pair : in Edge_Pairs.Map) is
+
+         Instruction : Instructions := Instruction_In;
+         Test : Coordinates;
+         New_Direction : Directions;
+
+      begin -- Move
+         loop -- Step
+            Test := Position.Coordinate;
+            case Position.Facing is
+               when East =>
+                  Test.X := Test.X + 1;
+               when South =>
+                  Test.Y := Test.Y + 1;
+               when West =>
+                  Test.X := Test.X - 1;
+               when North =>
+                  Test.Y := Test.Y - 1;
+            end case; -- Position.Facing
+            if Contains (Jungle_Map, Test) then
+               if Jungle_Map (Test) = Wall then
+                  Test := Position.Coordinate;
+                  Instruction.Steps := 1;
+               end if; -- Jungle_Map (Test) = Wall
+            else
+               -- Off map
+               Test := Position.Coordinate;
+               -- Use Edge_Pair to find new map coordinate and direction (part
+               -- two), direction is unchanged when wrap map used.
+               New_Direction := Edge_Pair ((Test, Position.Facing)).Facing;
+               Test := Edge_Pair ((Test, Position.Facing)).Coordinate;
+               if Jungle_Map (Test) = Wall then
+                  Test := Position.Coordinate;
+                  Instruction.Steps := 1;
+               else
+                  Position.Facing := New_Direction;
+               end if; -- Jungle_Map (Test) = Wall
+            end if; -- Contains (Jungle_Map, Test)
+            Position.Coordinate := Test;
+            exit when Instruction.Steps = 1;
+            Instruction.Steps := Instruction.Steps - 1;
+         end loop; -- Step
+         case Instruction.Turn is
+            when ACW =>
+               Position.Facing := @ - D90;
+            when CW =>
+               Position.Facing := @ + D90;
+            when None =>
+               null; -- last instruction does not have a turn
+         end case; -- Instruction.Turn
+      end Move;
+
+      Position : Positions;
+
+   begin -- Walk_Path
+      loop -- find start of path
+         exit when Contains (Jungle_Map, Position.Coordinate) and then
+           Jungle_Map ( Position.Coordinate) = Path;
+         Position.Coordinate.X := Position.Coordinate.X + 1;
+      end loop; -- find start of path
+      for I in Iterate (Instruction_List) loop
+         Move (Instruction_List (I), Position, Edge_Pair);
+      end loop; -- I in Iterate (Instruction_List)
+      return 1000 * Position.Coordinate.Y + 4 * Position.Coordinate.X +
+        Ordinates (Position.Facing);
+   end Walk_Path;
+
+   procedure Cube_Match (Internal_Vertex : in Vertex_Sets.Set;
+                         External_Vertex : in Vertex_Sets.Set;
+                         Edge_Pair : in out Edge_Pairs.Map) is
+
+      -- Used by part two to match edge elements when wrapped around a cube.
 
       type State_Elements is record
          Direction : Directions := Directions'First;
@@ -372,13 +317,17 @@ procedure December_22 is
                      Ec : in Edge_Pairs.Cursor;
                      Direction : in Directions) return Edge_Pairs.Cursor is
 
+         -- Finds next edge element in search direction, does not follow
+         -- direction changes. returns No_Element if none found.
+
          Test_Position : Positions := Key (Ec);
 
       begin -- Next
-         if Test_Position.Facing /= Direction + 1 and
-           Test_Position.Facing /= Direction - 1 then
-            raise Program_Error with "Search direction not along edge";
-         end if; -- Test_Position.Facing /= Direction + 1 and ...
+         if Test_Position.Facing /= Direction + D90 and
+           Test_Position.Facing /= Direction - D90 then
+            raise Program_Error with "Search direction not along edge, start "
+              & Key (Ec)'Img & " Direction" & Direction'Img;
+         end if; -- Test_Position.Facing /= Direction + D90 and ...
          case Direction is
          when East =>
             Test_Position.Coordinate.X := @ + 1;
@@ -432,7 +381,9 @@ procedure December_22 is
             end if; -- Contains (Edge_Pair, Test_Edge)
          end loop; -- D in Directions
          Edge_Pair (State (True).Ec) := Key (State (False).Ec);
+         Edge_Pair (State (True).Ec).Facing := @ + D180;
          Edge_Pair (State (False).Ec) := Key (State (True).Ec);
+         Edge_Pair (State (False).Ec).Facing := @ + D180;
          while not Finished loop
             for E in Boolean loop
                State (E).Ec_Next := Next (Edge_Pair, State (E).Ec,
@@ -446,24 +397,22 @@ procedure December_22 is
                      State (E).Change := True;
                      if Contains (Edge_Pair, (Key (State(E).Ec).Coordinate,
                                   State(E).Direction)) then
-                        State (E).Ec_Next := Find (Edge_Pair, (Key (State(E).Ec).Coordinate,
-                                  State(E).Direction));
                         State (E).Ec_Next :=
                           Find (Edge_Pair, (Key (State(E).Ec).Coordinate,
                                 State(E).Direction));
                         if Next (Edge_Pair, State (E).Ec_Next,
-                                 State (E).Direction + 1) /=
+                                 State (E).Direction + D90) /=
                           Edge_Pairs.No_Element then
-                           State (E).Direction := @ + 1;
+                           State (E).Direction := @ + D90;
                         elsif Next (Edge_Pair, State (E).Ec_Next,
-                                    State (E).Direction - 1) /=
+                                    State (E).Direction - D90) /=
                           Edge_Pairs.No_Element then
-                              State (E).Direction := @ - 1;
+                           State (E).Direction := @ - D90;
                         else
                            raise Program_Error with
                              "Could not find new edge direction" &
                              Element (State (E).Ec)'Img;
-                        end if; -- Next (Edge_Pair, State (E).Ec ...
+                        end if; -- Next (Edge_Pair, State (E).Ec_Next ...
                      else
                         raise Program_Error with
                           "Expected next element is facing in edge direction";
@@ -482,7 +431,9 @@ procedure December_22 is
                   State (True).Ec := State (True).Ec_Next;
                   State (False).Ec := State (False).Ec_Next;
                   Edge_Pair (State (True).Ec) := Key (State (False).Ec);
+                  Edge_Pair (State (True).Ec).Facing := @ + D180;
                   Edge_Pair (State (False).Ec) := Key (State (True).Ec);
+                  Edge_Pair (State (False).Ec).Facing := @ + D180;
                else
                   Finished := True;
                end if; -- Edge_Pair (State (True).Ec_Next) = Dummy and ...
@@ -508,7 +459,7 @@ procedure December_22 is
             Count := 0;
             for D in Directions loop
                if Contains (Edge_Pair, (Element (Vc), D)) and then
-                  Edge_Pair ((Element (Vc), D)) = Dummy then
+                 Edge_Pair ((Element (Vc), D)) = Dummy then
                   Count := @ + 1;
                end if; -- Contains (Edge_Pair, (Element (Vc), D)) and then ...
             end loop; -- D in Directions
@@ -518,73 +469,176 @@ procedure December_22 is
       end Unresolved_Vertex;
 
       procedure From_External (Vertex : in Coordinates;
+                               External_Vertex : in Vertex_Sets.Set;
                                Edge_Pair : in out Edge_Pairs.Map) is
 
          -- Starting from an external vertex which has only one matched edge,
          -- searches along contigueous matched edges until the first unmatched
          -- edge element is found. This is matched with the unmatched element at
-         -- the vertex. Matching continues until another vertex is encountered
-         -- or an edge element that has already been matched is found.
+         -- the vertex. Matching continues until an edge element that has
+         -- already been matched is found.
+
+         procedure Follow_Edge (State : in out States;
+                                Edge : in Boolean;
+                                External_Vertex : in Vertex_Sets.Set;
+                                Edge_Pair : in out Edge_Pairs.Map) is
+
+            -- Follows edge one step at a time irrespective of changes in
+            -- direction.
+
+         begin -- Follow_Edge
+            if Next (Edge_Pair, State (Edge).Ec, State (Edge).Direction) /=
+              Edge_Pairs.No_Element then
+               State (Edge).Ec_Next :=
+                 Next (Edge_Pair, State (Edge).Ec, State (Edge).Direction);
+            elsif
+              Contains (External_Vertex, Key (State (Edge).Ec).Coordinate) then
+               -- rotate search at an external vertex
+               State (Edge).Ec_Next :=
+                 Find (Edge_Pair, (Key (State(Edge).Ec).Coordinate,
+                       State(Edge).Direction));
+               if Next (Edge_Pair, State (Edge).Ec_Next,
+                        State (Edge).Direction + D90) /=
+                 Edge_Pairs.No_Element then
+                  State (Edge).Direction := @ + D90;
+               elsif Next (Edge_Pair, State (Edge).Ec_Next,
+                           State (Edge).Direction - D90) /=
+                 Edge_Pairs.No_Element then
+                  State (Edge).Direction := @ - D90;
+               else
+                  raise Program_Error with
+                    "Could not find new edge direction from external vertex" &
+                    Element (State (Edge).Ec)'Img;
+               end if; -- Next (Edge_Pair, State (Edge).Ec_Next ...
+            else
+               -- Internal vertex step diagonally
+               if Contains (Edge_Pair,
+                            ((Key (State (Edge).Ec).Coordinate.X + 1,
+                             Key (State (Edge).Ec).Coordinate.Y + 1),
+                             State (Edge).Direction + D180)) then
+                  State (Edge).Ec_Next :=
+                    Find (Edge_Pair,
+                          ((Key (State (Edge).Ec).Coordinate.X + 1,
+                           Key (State (Edge).Ec).Coordinate.Y + 1),
+                           State (Edge).Direction + D180));
+               elsif Contains (Edge_Pair,
+                               ((Key (State (Edge).Ec).Coordinate.X + 1,
+                                Key (State (Edge).Ec).Coordinate.Y - 1),
+                                State (Edge).Direction + D180)) then
+                  State (Edge).Ec_Next :=
+                    Find (Edge_Pair,
+                          ((Key (State (Edge).Ec).Coordinate.X + 1,
+                           Key (State (Edge).Ec).Coordinate.Y - 1),
+                           State (Edge).Direction + D180));
+               elsif Contains (Edge_Pair,
+                               ((Key (State (Edge).Ec).Coordinate.X - 1,
+                                Key (State (Edge).Ec).Coordinate.Y + 1),
+                                State (Edge).Direction + D180)) then
+                  State (Edge).Ec_Next :=
+                    Find (Edge_Pair,
+                          ((Key (State (Edge).Ec).Coordinate.X - 1,
+                           Key (State (Edge).Ec).Coordinate.Y + 1),
+                           State (Edge).Direction + D180));
+               elsif Contains (Edge_Pair,
+                               ((Key (State (Edge).Ec).Coordinate.X - 1,
+                                Key (State (Edge).Ec).Coordinate.Y - 1),
+                                State (Edge).Direction + D180)) then
+                  State (Edge).Ec_Next :=
+                    Find (Edge_Pair,
+                          ((Key (State (Edge).Ec).Coordinate.X - 1,
+                           Key (State (Edge).Ec).Coordinate.Y - 1),
+                           State (Edge).Direction + D180));
+               end if; -- Contains (Edge_Pair ...
+               if Next (Edge_Pair, State (Edge).Ec_Next,
+                        State (Edge).Direction + D90) /=
+                 Edge_Pairs.No_Element then
+                  State (Edge).Direction := @ + D90;
+               elsif Next (Edge_Pair, State (Edge).Ec_Next,
+                           State (Edge).Direction - D90) /=
+                 Edge_Pairs.No_Element then
+                  State (Edge).Direction := @ - D90;
+               else
+                  raise Program_Error with
+                    "Could not find new edge direction from internal vertex" &
+                    Element (State (Edge).Ec)'Img;
+               end if; -- Next (Edge_Pair, State (Edge).Ec_Next ...
+            end if; -- Next (Edge_Pair, State (Edge).Ec, State (Edge) ...
+            State (Edge).Ec := State (Edge).Ec_Next;
+         end Follow_Edge;
 
          State : States;
-         Finished : Boolean := False;
 
       begin -- From_External
-         -- Find unmatched edge element at vertex
+         -- Find matched and unmatched edge elements at vertex, State (False) is
+         -- already matched and State (True) is unmatched.
          for D in Directions loop
-            if Contains (Edge_Pair, (Vertex, D)) and then
-              Edge_Pair (Vertex, D)) = Dummy then
-               State (True).Ec := Find (Edge_Pair, (Vertex, D));
-            end if; -- Contains (Edge_Pair, (Vertex, D)) and then ...
+            if Contains (Edge_Pair, (Vertex, D)) then
+               if Edge_Pair ((Vertex, D)) = Dummy then
+                  State (True).Ec := Find (Edge_Pair, (Vertex, D));
+                  State (True).Direction := D;
+               else
+                  State (False).Ec := Find (Edge_Pair, (Vertex, D));
+                  State (False).Direction := D;
+               end if; -- Edge_Pair ((Vertex, D)) = Dummy
+            end if; -- Contains (Edge_Pair, (Vertex, D)) then
          end loop; -- D in Directions
-         if Next (Edge_Pair, Element (State (True).Ec).Facing - 1) /=
-           Edge_Pairs.No_Element and then
-           Element (Next (Edge_Pair, Element (State (True).Ec).Facing - 1)) =
-             Dummy then
-            State (True).Direction := Element (State (True).Ec).Facing - 1;
-         elsif Next (Edge_Pair, Element (State (True).Ec).Facing + 1) /=
-           Edge_Pairs.No_Element and then
-           Element (Next (Edge_Pair, Element (State (True).Ec).Facing + 1)) =
-             Dummy then
-            State (True).Direction := Element (State (True).Ec).Facing - 1;
-         else
-            raise Program_Error with "Unmatched edge
-         end if;
+         -- Find initial search directions
+         for E in Boolean loop
+            if Next (Edge_Pair, State (E).Ec, State (E).Direction - D90) /=
+              Edge_Pairs.No_Element then
+               State (E).Direction := @ - D90;
+            elsif Next (Edge_Pair, State (E).Ec, State (e).Direction + D90)
+              /= Edge_Pairs.No_Element then
+               State (E).Direction := @ + D90;
+            else
+               raise Program_Error with "Search direction not found, vertex " &
+                 Vertex'Img & " edge " & E'Img;
+            end if; -- Next (Edge_Pair, Element (State (E).Ec).Facing - D90) /=
+         end loop; -- E in Boolean
+         -- Search along matched edges until first unmatched element found.
+         while Element (State (False).Ec) /= Dummy loop
+            Follow_Edge (State, False, External_Vertex, Edge_Pair);
+         end loop; -- Element (State (False).Ec) /= Dummy
+         -- Match previously unmatched edge elements
+         while Element (State (True).Ec) = Dummy and
+           Element (State (False).Ec) = Dummy loop
+            Edge_Pair (State (True).Ec) := Key (State (False).Ec);
+            Edge_Pair (State (True).Ec).Facing := @ + D180;
+            Edge_Pair (State (False).Ec) := Key (State (True).Ec);
+            Edge_Pair (State (False).Ec).Facing := @ + D180;
+            Follow_Edge (State, True, External_Vertex, Edge_Pair);
+            Follow_Edge (State, False, External_Vertex, Edge_Pair);
+         end loop; -- Element (State (True).Ec) = Dummy and ...
       end From_External;
 
-
-   begin -- Match
+   begin -- Cube_Match
       for V in Iterate (Internal_Vertex) loop
          From_Internal (Element (V), Edge_Pair);
       end loop; -- V in Iterate (Internal_Vertex)
-      Put_Line ("Unresolved " & Element (Unresolved_Vertex (External_Vertex, Edge_Pair))'Img);
-   end Match;
+      while Unresolved_Vertex (External_Vertex, Edge_Pair) /=
+        Vertex_Sets.No_Element loop
+         From_External (Element (Unresolved_Vertex (External_Vertex,
+                        Edge_Pair)),
+                        External_Vertex, Edge_Pair);
+      end loop; -- Unresolved_Vertex (External_Vertex, Edge_Pair) =/ ...
+   end Cube_Match;
 
    Jungle_Map : Jungle_Maps.Map;
    Instruction_List : Instruction_Lists.Vector;
-   Side : Ordinates;
    Edge_Pair : Edge_Pairs.Map;
    Internal_Vertex, External_Vertex : Vertex_Sets.Set;
 
 begin -- December_22
    Read_Input (Jungle_Map, Instruction_List);
-   Put_Line ("Part one:" & Walk_Path (Jungle_Map, Instruction_List)'Img);
-   DJH.Execution_Time.Put_CPU_Time;
-   Side := Side_Length (Jungle_Map);
    Find_Edges (Jungle_Map, Edge_Pair, Internal_Vertex, External_Vertex);
-   Put_Line ("Internal Vertices");
-   for V in Iterate (Internal_Vertex) loop
-      Put_Line (Element (V).X'Img & Element (V).Y'Img);
-   end loop;
-   Put_Line ("External Vertices");
-   for V in Iterate (External_Vertex) loop
-      Put_Line (Element (V).X'Img & Element (V).Y'Img);
-   end loop;
-   Match (Internal_Vertex, External_Vertex, Edge_Pair);
-   Put_Line ("Edges:");
-   for E in Iterate (Edge_Pair) loop
-      Put_Line (Key (E).Coordinate.X'Img & Key (E).Coordinate.Y'Img & Key (E).Facing'Img & Element (E).Coordinate.X'Img & Element (E).Coordinate.Y'Img & Element (E).Facing'Img);
-   end loop;
-   Put_Line ("Part two:");
+   Wrap_Match (Jungle_Map, Edge_Pair);
+   Put_Line ("Part one:" &
+               Walk_Path (Jungle_Map, Instruction_List, Edge_Pair)'Img);
+   DJH.Execution_Time.Put_CPU_Time;
+   -- Reset Edge_Pair for part two
+   Find_Edges (Jungle_Map, Edge_Pair, Internal_Vertex, External_Vertex);
+   Cube_Match (Internal_Vertex, External_Vertex, Edge_Pair);
+   Put_Line ("Part two:" &
+               Walk_Path (Jungle_Map, Instruction_List, Edge_Pair)'Img);
    DJH.Execution_Time.Put_CPU_Time;
 end December_22;
